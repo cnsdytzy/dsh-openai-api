@@ -60,6 +60,8 @@ Chat Completions: `messages` (`system`/`developer`/`user`/`assistant`/`tool`), s
 
 Responses: string or item-array `input` (`message`, `function_call`, `function_call_output`; bare `{role,content}` accepted), `instructions`, `tools` (flattened functions), `previous_response_id` continuation (in-memory, process-lifetime, FIFO ≤ 200), full canonical event brackets ending in `response.completed`.
 
+`tool_choice: "none"` is honored by dropping tools entirely; every other value (including a `{type:'function'}` forced choice) degrades to plain auto.
+
 Not supported (rejected where detectable, ignored elsewhere): image/audio inputs, `logprobs`, `n > 1`. `response_format json_object/json_schema` degrades to an instruction hint rather than wire-level enforcement.
 
 ## Local development

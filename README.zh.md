@@ -60,6 +60,8 @@ Chat Completions：`messages`（system/developer/user/assistant/tool）、字符
 
 Responses：字符串或条目数组的 `input`（`message`、`function_call`、`function_call_output`；也接受裸 `{role,content}`）、`instructions`、`tools`（扁平函数定义）、`previous_response_id` 续聊（进程内存缓存，FIFO 上限 200）、完整的规范事件序列并以 `response.completed` 收尾。
 
+`tool_choice: "none"` 会退化为完全不传工具；其他取值（包括 `{type:'function'}` 强制指定函数）一律按 auto 处理。
+
 不支持项（可识别的会明确报错，其余忽略）：图像/音频输入、`logprobs`、`n > 1`。`response_format json_object/json_schema` 以指令提示方式降级实现，而非协议级强制。
 
 ## 本地开发
