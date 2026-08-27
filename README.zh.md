@@ -12,24 +12,28 @@
 
 ## 安装
 
+任意机器：
+
 ```sh
-# 本地目录安装
+# 从 GitHub 安装
+dsh plugin --profile web add github:huyang2024/dsh-openai-api
+
+# 或本地目录安装
 dsh plugin --profile web add file:/absolute/path/to/dsh-openai-api
-# 或发布后
-dsh plugin --profile web add @lj/dsh-openai-api
 ```
 
-再在 profile 用户补丁层 `$DSH_HOME/profiles/web/cordis.patch.yml` 中加一行：
+再在 profile 用户补丁层 `$DSH_HOME/profiles/web/cordis.patch.yml` 中以 `insert:` 方式加入新行（补丁层的裸 `{id, name}` 条目只用于改写下层已有行，不会生效）：
 
 ```yaml
-- id: openai-api
-  name: '@lj/dsh-openai-api'
-  inject: [webServer]
-  config:
-    apiKey: ''            # 可选 Bearer 密钥；留空则仅允许本机回环访问
-    pathPrefix: '/v1'     # 可选，默认值如此
-    maxBodyBytes: 33554432
-    allowedOrigins: []    # 额外允许跨域的精确 Origin 列表
+- insert:
+    - id: openai-api
+      name: '@lj/dsh-openai-api'
+      inject: [webServer]
+      config:
+        apiKey: ''            # 可选 Bearer 密钥；留空则仅允许本机回环访问
+        pathPrefix: '/v1'     # 可选，默认值如此
+        maxBodyBytes: 33554432
+        allowedOrigins: []    # 额外允许跨域的精确 Origin 列表
 ```
 
 重启 profile 使新行生效。

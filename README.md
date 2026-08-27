@@ -12,25 +12,28 @@ Generation is served by the harness `llm` runtime: requests are answered with wh
 
 ## Install
 
-From any machine with this checkout, inside the target profile:
+From any machine:
 
 ```sh
+# from GitHub
+dsh plugin --profile web add github:huyang2024/dsh-openai-api
+
+# or from a local checkout
 dsh plugin --profile web add file:/absolute/path/to/dsh-openai-api
-# or once published:
-dsh plugin --profile web add @lj/dsh-openai-api
 ```
 
-Then compose a row for it in the profile's user patch layer — `$DSH_HOME/profiles/web/cordis.patch.yml`:
+Then compose an insert for it in the profile's user patch layer — `$DSH_HOME/profiles/web/cordis.patch.yml`. New rows reach the tree only through `insert:`; a bare `{id, name}` entry would be treated as an override of a lower layer and skipped:
 
 ```yaml
-- id: openai-api
-  name: '@lj/dsh-openai-api'
-  inject: [webServer]
-  config:
-    apiKey: ''            # optional Bearer key; empty keeps loopback-only access
-    pathPrefix: '/v1'     # optional, this default shown
-    maxBodyBytes: 33554432
-    allowedOrigins: []    # extra exact origins allowed cross-origin
+- insert:
+    - id: openai-api
+      name: '@lj/dsh-openai-api'
+      inject: [webServer]
+      config:
+        apiKey: ''            # optional Bearer key; empty keeps loopback-only access
+        pathPrefix: '/v1'     # optional, this default shown
+        maxBodyBytes: 33554432
+        allowedOrigins: []    # extra exact origins allowed cross-origin
 ```
 
 Restart the profile so the new row activates.
