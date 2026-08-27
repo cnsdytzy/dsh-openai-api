@@ -1,5 +1,5 @@
 /**
- * Standalone smoke test for @lj/dsh-openai-api with a stubbed Cordis context
+ * Standalone smoke test for @huyang2024/dsh-openai-api with a stubbed Cordis context
  * and a stubbed llm runtime. Exercises: models list, chat non-stream,
  * chat stream (incl. tool-call deltas + include_usage), responses non-stream,
  * responses stream (text + function_call brackets), previous_response_id

@@ -1,4 +1,4 @@
-# @lj/dsh-openai-api
+# @huyang2024/dsh-openai-api
 
 OpenAI-compatible HTTP surface for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). After this plugin is installed into a dsh profile, the harness web server additionally serves:
 
@@ -27,7 +27,7 @@ Then compose an insert for it in the profile's user patch layer — `$DSH_HOME/p
 ```yaml
 - insert:
     - id: openai-api
-      name: '@lj/dsh-openai-api'
+      name: '@huyang2024/dsh-openai-api'
       inject: [webServer]
       config:
         apiKey: ''            # optional Bearer key; empty keeps loopback-only access

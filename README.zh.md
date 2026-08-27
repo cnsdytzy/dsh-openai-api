@@ -1,4 +1,4 @@
-# @lj/dsh-openai-api
+# @huyang2024/dsh-openai-api
 
 为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供标准 OpenAI 兼容 HTTP 接口的插件。安装到 dsh 配置（profile）后，harness 的 Web 服务会额外提供：
 
@@ -27,7 +27,7 @@ dsh plugin --profile web add file:/absolute/path/to/dsh-openai-api
 ```yaml
 - insert:
     - id: openai-api
-      name: '@lj/dsh-openai-api'
+      name: '@huyang2024/dsh-openai-api'
       inject: [webServer]
       config:
         apiKey: ''            # 可选 Bearer 密钥；留空则仅允许本机回环访问
