@@ -1,18 +1,31 @@
 # @huyang2024/dsh-openai-api
 
-OpenAI-compatible HTTP surface for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). After this plugin is installed into a dsh profile, the harness web server additionally serves:
+OpenAI-compatible HTTP surface for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), backed by **real DSH agent sessions**.
+
+After this plugin is installed into a dsh profile, the harness web server additionally serves:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /v1/chat/completions` | Chat Completions API (streaming and non-streaming), including function/tool calling |
-| `POST /v1/responses` | Responses API subset (streaming and non-streaming), stateless plus a `previous_response_id` continuation cache |
-| `GET /v1/models` | Model catalog aggregated across registered providers |
+| `POST /v1/chat/completions` | Chat Completions API (streaming + non-streaming) |
+| `POST /v1/responses` | Responses API subset (streaming + non-streaming) |
+| `GET /v1/models` | Advertised model id |
 
-Generation is served by the harness `llm` runtime: requests are answered with whichever provider/model your deployment has configured (the Models settings page writes it; `agentDefaultModel.currentSelection()` reads it).
+## What "agent-backed" means
+
+Each request is served by a **live DSH agent session** (the harness `agents` registry + the agent loop), so every call gets the agent's full world: its configured tools, bash/files access, skills, prompt sections, and preset persona. This is an **agent gateway**, not a thin LLM proxy:
+
+- The **agent owns tool use**. Client-side `tools` / `tool_choice` / function-call messages are rejected — the agent decides what tools to call and why.
+- Streaming deltas arrive **once per committed assistant message**, not per token. Reasoning, tool calls, and token-level chunk streams stay off the wire; only committed assistant text reaches the client.
+- The first request for a `(key, preset)` pair **seeds** a session by rendering the client's full message array into a labeled transcript prompt; later requests admit only the latest user turn (the session already holds the history).
+
+## Session identity
+
+`(API key tenant, X-Agent-Preset)`:
+
+- The accepted **apiKey namespaces the caller** — one session per key, so different keys never share a session even for the same preset, and a client resumes its own session on reconnect.
+- The **`X-Agent-Preset` header** names the preset the session joins (absent → the profile default). Resolved only at session creation.
 
 ## Install
-
-From any machine:
 
 ```sh
 # from GitHub
@@ -22,7 +35,7 @@ dsh plugin --profile web add github:huyang2024/dsh-openai-api
 dsh plugin --profile web add file:/absolute/path/to/dsh-openai-api
 ```
 
-Then compose an insert for it in the profile's user patch layer — `$DSH_HOME/profiles/web/cordis.patch.yml`. New rows reach the tree only through `insert:`; a bare `{id, name}` entry would be treated as an override of a lower layer and skipped:
+Then compose an insert in the profile's user patch layer — `$DSH_HOME/profiles/web/cordis.patch.yml`. New rows reach the tree only through `insert:`:
 
 ```yaml
 - insert:
@@ -30,43 +43,52 @@ Then compose an insert for it in the profile's user patch layer — `$DSH_HOME/p
       name: '@huyang2024/dsh-openai-api'
       inject: [webServer]
       config:
-        apiKey: ''            # optional Bearer key; empty keeps loopback-only access
-        pathPrefix: '/v1'     # optional, this default shown
-        maxBodyBytes: 33554432
-        allowedOrigins: []    # extra exact origins allowed cross-origin
+        pathPrefix: '/v1'     # optional, default shown
+        apiKeys: []           # optional; see below
+        model: default        # optional; model id advertised at /v1/models
+        provider: ''          # optional; provider route for created sessions
+        cwd: ''               # optional; absolute working directory for sessions
 ```
 
 Restart the profile so the new row activates.
 
-## Authentication and trust
+## Configuration
 
-- With `apiKey` set, every call must present `Authorization: Bearer <key>` (constant-time comparison).
-- Without `apiKey`, only loopback callers are served; remote callers get `403 unauthorized_remote`, so an accidental LAN bind never exposes unauthenticated model access.
-- Browser cross-origin calls from other origins are rejected unless listed in `allowedOrigins` or authenticated with a valid key. Same-origin pages pass through. Preflight `OPTIONS` is answered on all three paths.
+All keys optional; created sessions fall back to the host defaults.
 
-## Model routing
+| key | default | what it does |
+| --- | --- | --- |
+| `model` | `default` | Model id advertised at `/v1/models`. A request's `model` (absent, or this id) uses the host default selection; any other id is passed to the session as the model. |
+| `provider` | host default | Provider route for created sessions. |
+| `apiKeys` | unset | Per-client keys. Each distinct key is a separate tenant — one session per `(key, preset)`. When set, a request must present one (`Authorization: Bearer <key>`); otherwise it is a 401. Unset, the surface is a single keyless tenant restricted to **loopback** callers. |
+| `cwd` | the `dsh web` process's cwd | Absolute working directory for created sessions. Must start with `/`. |
 
-The request's `model` field resolves as:
+## Using the API
 
-1. Exact `"provider/model"` pair when the provider route exists.
-2. An id found in some registered provider's catalog (60 s advisory cache).
-3. Otherwise passed verbatim to the default provider selection.
+```js
+import OpenAI from 'openai'
+const client = new OpenAI({ baseURL: 'http://127.0.0.1:3080/v1', apiKey: 'local-key' })
 
-Omitted `model` uses the deployment default unchanged.
+// Optional: choose the agent preset the session joins (absent → default preset).
+const preset = { 'X-Agent-Preset': 'custom-agent-preset' }
 
-## Request support notes
+const reply = await client.chat.completions.create(
+  { model: 'default', messages: [{ role: 'user', content: 'What are you?' }] },
+  { headers: preset },
+)
+```
 
-Chat Completions: `messages` (`system`/`developer`/`user`/`assistant`/`tool`), string or typed-part content, `tools` + tool-call round-trips (`tool_calls` ↔ `role:'tool'` results), `temperature`, `max_tokens`/`max_completion_tokens`, `stop` (≤ 4), `stream`, `stream_options.include_usage`, `n = 1`. Streaming deltas carry `reasoning_content` (DeepSeek-style) when the provider emits reasoning.
+`/v1/responses` follows the same session model; `previous_response_id` is accepted and ignored (the sticky session is the store).
 
-Responses: string or item-array `input` (`message`, `function_call`, `function_call_output`; bare `{role,content}` accepted), `instructions`, `tools` (flattened functions), `previous_response_id` continuation (in-memory, process-lifetime, FIFO ≤ 200), full canonical event brackets ending in `response.completed`.
+## Auth and trust
 
-`tool_choice: "none"` is honored by dropping tools entirely; every other value (including a `{type:'function'}` forced choice) degrades to plain auto.
-
-Not supported (rejected where detectable, ignored elsewhere): image/audio inputs, `logprobs`, `n > 1`. `response_format json_object/json_schema` degrades to an instruction hint rather than wire-level enforcement.
+- With `apiKeys` set, an exact `Authorization: Bearer <key>` is required and the matched key is the tenant.
+- Without `apiKeys`, only **loopback** callers are served (a deliberate hardening over the reference implementation, so an accidental LAN bind never exposes unauthenticated agent access).
+- Browser cross-origin calls from other origins are rejected unless listed in `allowedOrigins`, or authenticated with a valid key. Preflight `OPTIONS` is answered on all three paths.
 
 ## Local development
 
 ```sh
 node --check lib/index.js     # syntax
-node test/smoke.mjs           # stub-runtime protocol tests, no network
+node test/smoke.mjs           # agent-backed protocol tests against a faked agents service
 ```

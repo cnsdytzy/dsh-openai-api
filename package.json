@@ -1,7 +1,7 @@
 {
   "name": "@huyang2024/dsh-openai-api",
-  "description": "OpenAI-compatible HTTP surface: POST /v1/chat/completions, POST /v1/responses, GET /v1/models over the harness webServer and llm services",
-  "version": "0.1.2",
+  "description": "OpenAI-compatible HTTP surface backed by DSH agent sessions: POST /v1/chat/completions, POST /v1/responses, GET /v1/models over the harness webServer + agents services",
+  "version": "0.2.0",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
