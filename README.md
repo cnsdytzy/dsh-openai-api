@@ -1,5 +1,5 @@
 # @huyang2024/dsh-openai-api
-
+补充完善了openai api接口，使其能够更像大模型，能够接入其它智能体 2026年9月24日
 OpenAI-compatible HTTP surface for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), backed by **real DSH agent sessions**.
 
 After this plugin is installed into a dsh profile, the harness web server additionally serves:
