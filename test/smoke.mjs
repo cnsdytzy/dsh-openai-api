@@ -341,6 +341,62 @@ async function main() {
 		}
 		//#endregion
 
+		//#region unsupported sampling/control params rejected (no silent ignore)
+		{
+			const rejEnv = makeCtx({});
+			const rejServer = await listen((req, res) => rejEnv.routes.get(new URL(req.url, "http://x").pathname)(req, res));
+			try {
+				const cases = [
+					{ messages: [{ role: "user", content: "hi" }], temperature: 0.2 },
+					{ messages: [{ role: "user", content: "hi" }], top_p: 0.5 },
+					{ messages: [{ role: "user", content: "hi" }], stop: ["\n"] },
+					{ messages: [{ role: "user", content: "hi" }], presence_penalty: 0.1 },
+					{ messages: [{ role: "user", content: "hi" }], response_format: { type: "json_object" } },
+				];
+				for (const body of cases) {
+					const res = await request(rejServer.url, "/v1/chat/completions", { method: "POST", body });
+					assert.strictEqual(res.status, 400, `expected 400 for ${JSON.stringify(body)}`);
+					assert.match(JSON.parse(res.text).error.message, /not supported/);
+				}
+				// Responses path must reject the same params (it previously ignored them).
+				const rTools = await request(rejServer.url, "/v1/responses", { method: "POST", body: { input: "hi", tools: [{ type: "function", function: { name: "f" } }] } });
+				assert.strictEqual(rTools.status, 400);
+				const rFmt = await request(rejServer.url, "/v1/responses", { method: "POST", body: { input: "hi", text: { format: { type: "json_schema" } } } });
+				assert.strictEqual(rFmt.status, 400);
+				console.log("unsupported params rejected (chat + responses) OK");
+			} finally {
+				rejServer.server.close();
+			}
+		}
+		//#endregion
+
+		//#region stateless mode: each request self-contained, no session reuse/persistence
+		{
+			const stEnv = makeCtx({ stateless: true });
+			const stServer = await listen((req, res) => stEnv.routes.get(new URL(req.url, "http://x").pathname)(req, res));
+			try {
+				stEnv.setTurn({ text: "A", usage: { inputTokens: 2, outputTokens: 1 }, reason: { kind: "stop" }, turn: 1 });
+				const r1 = await request(stServer.url, "/v1/chat/completions", { method: "POST", body: { messages: [{ role: "user", content: "first" }, { role: "user", content: "second" }] } });
+				assert.strictEqual(r1.status, 200);
+				// Full transcript seeded every time (no prior session to hold history).
+				assert.ok(stEnv.lastAgent().lastMessage.content[0].text.includes("[user] first"));
+				assert.ok(stEnv.lastAgent().lastMessage.content[0].text.includes("[user] second"));
+				const afterFirst = stEnv.createLog.length;
+				// Second call creates a brand-new session and re-seeds the full transcript.
+				stEnv.setTurn({ text: "B", usage: { inputTokens: 2, outputTokens: 1 }, reason: { kind: "stop" }, turn: 1 });
+				const r2 = await request(stServer.url, "/v1/chat/completions", { method: "POST", body: { messages: [{ role: "user", content: "third" }] } });
+				assert.strictEqual(r2.status, 200);
+				assert.strictEqual(stEnv.createLog.length, afterFirst + 1, "stateless must create a new session per request");
+				// Ephemeral session is disposed once the turn completes.
+				await new Promise((r) => setImmediate(r));
+				assert.ok(stEnv.lastAgent().disposed, "ephemeral session disposed after completion");
+				console.log("stateless mode OK");
+			} finally {
+				stServer.server.close();
+			}
+		}
+		//#endregion
+
 		//#region teardown disposes held sessions and routes
 		{
 			const before = env.teardownEffects?.length ?? 0;
